@@ -67,9 +67,33 @@ int main(int argc, char *argv[]){
         return printError("Error opening file.", err);
     }
 
-    // I believe that now we need to find the stream... at some point I should 
-    // start putting some of these things in helper functions
+    // formatCtx struct field nb_stream is integer, has number of streams
+    int no_strms = formatCtx->nb_streams;
+    printf("%d\n", no_strms);
 
+    // now, we must iterate htrough the streams and find the video stream!
+    AVStream **strms = formatCtx->streams;
+    
+    // for(int idx = 0; idx < no_strms; idx++){
+    //     printf("%p\n", strms[idx]);
+    // }
+
+    int vid_strm_idx = -1;
+
+    for(int idx = 0; idx < no_strms; idx++){
+        if(strms[idx]->codecpar->codec_type == AVMEDIA_TYPE_VIDEO){
+            vid_strm_idx = idx;
+            break;
+        }
+    }
+
+    if (vid_strm_idx == -1){
+        // if we're here, there was no video stream. this shouldn't happen.
+        printf("this really shouldn't happen... video stream not found\n");
+        exit(1);
+    }
+
+    AVStream *vid_strm = strms[vid_strm_idx];
     
 
 
