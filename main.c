@@ -93,8 +93,53 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    AVStream *vid_strm = strms[vid_strm_idx];
+    // store stream locally
+    AVStream * vid_strm = strms[vid_strm_idx];
+
+    // store codec params locally, codec params contained in AVStream *vid_strm
+    AVCodecParameters * codecpar = vid_strm->codecpar;
+    int codec_id = codecpar->codec_id;
+
+    // initialize decoder
+    const AVCodec * decoder = avcodec_find_decoder(codec_id);
+
+    // normal stuff making sure that worked
+
+    if(!decoder){
+        printf("this shouldn't happen; no decoder was found for the thing\n");
+        exit(1);
+    }
+
+    // now it looks like we need to set up what's called a decodercontext
+
+    AVCodecContext * codec_context = avcodec_alloc_context3(decoder);
     
+    if(!codec_context){
+        printf("this also shouldn't happen; no context could be created for codec\n");
+        exit(1);
+    }
+
+    // now, according to perplexity, we need to get the relevant codec params
+    // into our new context
+
+
+    if(avcodec_parameters_to_context(codec_context, codecpar)){
+        printf("some error with the copying\n");
+        exit(1);
+    }
+
+    // now we open the codec
+
+    if(avcodec_open2(codec_context, decoder, NULL)){
+        printf("error opening the codec\n");
+        exit(1);
+    }
+
+    
+
+
+
+
 
 
 return 0;
