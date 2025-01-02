@@ -135,7 +135,16 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    
+    // I swear I will put this all in helper functions eventually. 
+    // First thing, allocate a packet pointer and a frame pointer
+
+    AVPacket * pk_ptr = av_packet_alloc();
+    AVFrame * frm = av_frame_alloc();
+
+
+    // now, fetch a packet from our context
+
+
 
 
 
