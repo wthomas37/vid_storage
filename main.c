@@ -74,9 +74,6 @@ int main(int argc, char *argv[]){
     // now, we must iterate htrough the streams and find the video stream!
     AVStream **strms = formatCtx->streams;
     
-    // for(int idx = 0; idx < no_strms; idx++){
-    //     printf("%p\n", strms[idx]);
-    // }
 
     int vid_strm_idx = -1;
 
@@ -142,7 +139,38 @@ int main(int argc, char *argv[]){
     AVFrame * frm = av_frame_alloc();
 
 
-    // now, fetch a packet from our context
+    // now, fetch a packet from our context.
+    // My understanding is, read a frame from the context (packet)
+    // decode packet 
+
+    // av_read_frame returns 0 when successful, negative error codes for EOF
+
+    // int ret = av_read_frame(formatCtx, pk_ptr);
+    // printf("av_read_frame() output is %d\n", ret);
+
+    while (!av_read_frame(formatCtx, pk_ptr)) {
+        // generally, while 0 is returned
+        if (pk_ptr->stream_index != vid_strm_idx){
+            continue;
+        }
+
+        // otherwise, we're dealing with a vid ptr
+        // now, we decode
+
+        if (!avcodec_send_packet(codec_context, pk_ptr)){
+            printf("there was an error in decoding\n");
+            break;
+        }
+
+        // could be multiple frames, now we receive
+
+        while (!avcodec_receive_frame(codec_context, frm)){
+            printf("we have a frame!\n");
+            av_frame_unref(frm);
+        }
+
+
+    }
 
 
 
@@ -151,7 +179,7 @@ int main(int argc, char *argv[]){
 
 
 
-return 0;
+    return 0;
 
 }
 
