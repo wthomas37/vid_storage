@@ -29,8 +29,8 @@ int main(int argc, char *argv[]){
     // check to make sure that there are only "2" args
 
     if (argc != 2){
-        printf("Invalid input. Just put a filename");
-        return 1;
+        printf("Invalid input. Just put a filename\n");
+        exit(1);
     }
 
     // get the filename
@@ -46,6 +46,8 @@ int main(int argc, char *argv[]){
     // ^^ think about how that works. Remember pointer arithmetic?
     // this is also already incredibly unsafe code lmao
 
+    // open the outfile to make sure it works
+
     outFile = fopen(outFilename, "w+");
     
     if(outFile == NULL){
@@ -54,22 +56,23 @@ int main(int argc, char *argv[]){
 
     fclose(outFile);
 
-    // Okay. More I/O stuff... like what do I even do now?
+    // Okay, now we set up our AVFormatContext
 
     // Set up the context
 
     int err = 0;
 
     AVFormatContext *formatCtx = NULL;
-    // I'll come back; I really don't know what this all does
+    // declare our AVFormatContext
 
     if ((err = avformat_open_input(&formatCtx, filename, NULL, 0))){
+        // returns 0 if it works, error is returned otherwise
+        // this is why we use printError
         return printError("Error opening file.", err);
     }
 
     // formatCtx struct field nb_stream is integer, has number of streams
     int no_strms = formatCtx->nb_streams;
-    printf("%d\n", no_strms);
 
     // now, we must iterate htrough the streams and find the video stream!
     AVStream **strms = formatCtx->streams;
@@ -97,6 +100,8 @@ int main(int argc, char *argv[]){
     AVCodecParameters * codecpar = vid_strm->codecpar;
     int codec_id = codecpar->codec_id;
 
+    printf("codec_id: %d\n", codec_id);
+
     // initialize decoder
     const AVCodec * decoder = avcodec_find_decoder(codec_id);
 
@@ -120,16 +125,15 @@ int main(int argc, char *argv[]){
     // into our new context
 
 
-    if(avcodec_parameters_to_context(codec_context, codecpar)){
-        printf("some error with the copying\n");
-        exit(1);
+    if((err = avcodec_parameters_to_context(codec_context, codecpar))){
+        return printError("error copying parameters into codec context\n", err);
     }
 
+    // as your days so your life
     // now we open the codec
 
-    if(avcodec_open2(codec_context, decoder, NULL)){
-        printf("error opening the codec\n");
-        exit(1);
+    if((err = avcodec_open2(codec_context, decoder, NULL))){
+        return printError("error opening the codec\n", err);
     }
 
     // I swear I will put this all in helper functions eventually. 
@@ -145,39 +149,96 @@ int main(int argc, char *argv[]){
 
     // av_read_frame returns 0 when successful, negative error codes for EOF
 
-    // int ret = av_read_frame(formatCtx, pk_ptr);
-    // printf("av_read_frame() output is %d\n", ret);
+    int frm_count = 0;
 
-    while (!av_read_frame(formatCtx, pk_ptr)) {
-        // generally, while 0 is returned
+    // av_read_frame demuxes and gets us a packet
+    // 0 if good, then various errors otherwise. Need to handle them
+
+    int out;
+
+    while(1){
+        out = av_read_frame(formatCtx, pk_ptr);
+
+        if (out){
+            // non-zero rv, either EOF or something bad!
+            if (out == AVERROR_EOF){
+                printf("end of file!\n");
+                break;
+            }
+            
+            return printError("av_read_frame error", out);
+        }
+
+        // if we're here, we got a normal rv, and so pk_ptr now contains smth
+
+        // need to check if it's a video stream
+
         if (pk_ptr->stream_index != vid_strm_idx){
+            // if here, it was not a video stream packet
             continue;
         }
 
-        // otherwise, we're dealing with a vid ptr
-        // now, we decode
+        // ** DECODING **
 
-        if (!avcodec_send_packet(codec_context, pk_ptr)){
-            printf("there was an error in decoding\n");
-            break;
+        if ((out = avcodec_send_packet(codec_context, pk_ptr))){
+            return printError("avcodec_send_packet error", out);
         }
 
-        // could be multiple frames, now we receive
+        // I really don't know why I need to flush here; if I don't, 
+        // it doesn't work
 
-        while (!avcodec_receive_frame(codec_context, frm)){
-            printf("we have a frame!\n");
+        if ((out = avcodec_send_packet(codec_context, NULL))){
+            return printError("avcodec_send_packet NULL Flush error", out);
+        }
+
+        // receiving
+
+        while(1){
+            out = avcodec_receive_frame(codec_context, frm);
+            if (out) {
+
+                if (out == AVERROR_EOF){
+                    av_frame_unref(frm);
+                    avcodec_flush_buffers(codec_context);
+                    break;
+                }
+
+                printf("%d\n", out);
+                return printError("receive_frame error", out);
+            }
+            frm_count++;
             av_frame_unref(frm);
         }
-
-
     }
 
+    // while (!av_read_frame(formatCtx, pk_ptr)) {
+    //     if (pk_ptr->stream_index != vid_strm_idx){
+    //         // printf("wrong idx on packet\n");
+    //         continue;
+    //     }
 
+    //     // otherwise, we're dealing with a vid ptr
+    //     // now, we decode
 
+    //     if ((err = avcodec_send_packet(codec_context, pk_ptr))){
+    //         printf("there was an error in decoding\n");
+    //         continue;
+    //     }
 
+    //     // could be multiple frames, now we receive. due to multiple frames, while loop
 
+    //     while ((err = avcodec_receive_frame(codec_context, frm)) >= 0){
+    //         // printf("we have a frame!\n");
+    //         frm_count++;
+    //         av_frame_unref(frm);
+    //     }
 
+    //     printf("error code: %d\n", err);
 
+    //     // printError("why did we stop?", err);
+    // }
+
+    printf("total number of video frames viewed: %d\n", frm_count);
 
     return 0;
 
